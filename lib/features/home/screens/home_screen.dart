@@ -401,7 +401,7 @@ class _ProductCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final inWishlist = ref.watch(wishlistProvider.notifier).contains(product.id);
+    final inWishlist = ref.watch(wishlistProvider).any((p) => p.id == product.id);
 
     return GestureDetector(
       onTap: () => context.push('/product/${product.id}'),

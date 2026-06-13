@@ -31,8 +31,7 @@ class OmniCartApp extends StatelessWidget {
       title: 'OmniCart',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.system,
+      themeMode: ThemeMode.light,
       routerConfig: appRouter,
     );
   }

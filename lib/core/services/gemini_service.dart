@@ -89,18 +89,20 @@ class GeminiService {
   Future<List<String>> generateGroceryList({
     required int familySize,
     required int weeks,
+    required List<String> availableProducts,
   }) async {
     try {
+      final catalog = availableProducts.join('", "');
       final response = await _model.generateContent([
         Content.text(
-          'Generate a grocery list for a family of $familySize for $weeks week(s) in India. '
-          'Include vegetables, dairy, staples, snacks, and household items. '
-          'Return ONLY a JSON array of product names, no explanation. Example: ["Rice 5kg", "Milk 2L"]',
+          'Available grocery catalog: ["$catalog"]\n\n'
+          'Select items from the catalog above to create a weekly grocery list for a family of $familySize for $weeks week(s) in India. '
+          'Return ONLY a JSON array of exact product names from the catalog. Do NOT invent items not in the list. '
+          'Example: ["Apple", "Milk", "Rice"]',
         ),
       ]);
       final text = response.text ?? '[]';
       final cleaned = text.replaceAll('```json', '').replaceAll('```', '').trim();
-      // Simple parse: extract items between quotes
       final regex = RegExp(r'"([^"]+)"');
       return regex.allMatches(cleaned).map((m) => m.group(1)!).toList();
     } catch (_) {

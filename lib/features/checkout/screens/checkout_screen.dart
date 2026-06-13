@@ -226,7 +226,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> with TickerProv
               });
             },
             onNext: () async {
-              if (!_formKey.currentState!.validate()) return;
+              if (_addingNew && !(_formKey.currentState?.validate() ?? false)) return;
               await _saveNewAddressIfNeeded();
               if (mounted) _goToStep(1);
             },

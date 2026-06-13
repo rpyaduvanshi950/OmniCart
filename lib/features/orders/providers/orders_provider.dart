@@ -8,12 +8,17 @@ import '../../../models/cart_item_model.dart';
 final ordersProvider = StreamProvider<List<OrderModel>>((ref) {
   final uid = FirebaseAuth.instance.currentUser?.uid;
   if (uid == null) return Stream.value([]);
+  // Single-field filter only — avoids requiring a composite Firestore index.
+  // Sort client-side so the index isn't needed.
   return FirebaseFirestore.instance
       .collection('orders')
       .where('userId', isEqualTo: uid)
-      .orderBy('createdAt', descending: true)
       .snapshots()
-      .map((snap) => snap.docs.map((d) => OrderModel.fromMap(d.data())).toList());
+      .map((snap) {
+        final orders = snap.docs.map((d) => OrderModel.fromMap(d.data())).toList();
+        orders.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        return orders;
+      });
 });
 
 final placeOrderProvider = Provider<Future<String> Function(List<CartItem>, String, String)>((ref) {

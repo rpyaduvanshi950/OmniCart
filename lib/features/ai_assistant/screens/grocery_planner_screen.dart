@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/gemini_service.dart';
 import '../../../core/services/product_api_service.dart';
+import '../../../core/utils/formatters.dart';
+import '../../../models/product_model.dart';
 import '../../cart/providers/cart_provider.dart';
 
-final _groceryListProvider = StateProvider<List<String>>((_) => []);
+final _groceryProductsProvider = StateProvider<List<Product>>((_) => []);
+final _selectedIdsProvider = StateProvider<Set<int>>((_) => {});
 final _isGeneratingProvider = StateProvider<bool>((_) => false);
-final _checkedItemsProvider = StateProvider<Set<String>>((_) => {});
 
 class GroceryPlannerScreen extends ConsumerStatefulWidget {
   const GroceryPlannerScreen({super.key});
@@ -22,51 +25,68 @@ class _GroceryPlannerScreenState extends ConsumerState<GroceryPlannerScreen> {
 
   Future<void> _generate() async {
     ref.read(_isGeneratingProvider.notifier).state = true;
-    ref.read(_groceryListProvider.notifier).state = [];
-    ref.read(_checkedItemsProvider.notifier).state = {};
-    final items = await GeminiService.instance.generateGroceryList(
+    ref.read(_groceryProductsProvider.notifier).state = [];
+    ref.read(_selectedIdsProvider.notifier).state = {};
+
+    // Fetch all available grocery products from DummyJSON catalog
+    final catalog = await ProductApiService.instance.fetchByCategory('groceries', limit: 50);
+
+    if (!mounted) return;
+
+    // Ask AI to pick the right ones for this family/duration from the actual catalog
+    final selectedNames = await GeminiService.instance.generateGroceryList(
       familySize: _familySize,
       weeks: _weeks,
+      availableProducts: catalog.map((p) => p.title).toList(),
     );
-    ref.read(_groceryListProvider.notifier).state = items;
+
+    if (!mounted) return;
+
+    // Match AI-selected names to actual Product objects (case-insensitive)
+    final selectedLower = selectedNames.map((n) => n.toLowerCase()).toSet();
+    final matched = catalog.where((p) => selectedLower.contains(p.title.toLowerCase())).toList();
+
+    // Fall back to full catalog if AI returned nothing recognisable
+    final products = matched.isNotEmpty ? matched : catalog;
+
+    ref.read(_groceryProductsProvider.notifier).state = products;
+    // Pre-select all recommended products
+    ref.read(_selectedIdsProvider.notifier).state = products.map((p) => p.id).toSet();
     ref.read(_isGeneratingProvider.notifier).state = false;
   }
 
-  Future<void> _addCheckedToCart() async {
-    final checked = ref.read(_checkedItemsProvider);
-    final allItems = ref.read(_groceryListProvider);
-    final toAdd = checked.isEmpty ? allItems : allItems.where((i) => checked.contains(i)).toList();
+  void _addSelectedToCart() {
+    final products = ref.read(_groceryProductsProvider);
+    final selected = ref.read(_selectedIdsProvider);
+    final toAdd = products.where((p) => selected.contains(p.id)).toList();
 
-    int added = 0;
-    for (final item in toAdd) {
-      final products = await ProductApiService.instance.searchProducts(item, limit: 1);
-      if (products.isNotEmpty) {
-        ref.read(cartProvider.notifier).addProduct(products.first);
-        added++;
-      }
+    for (final p in toAdd) {
+      ref.read(cartProvider.notifier).addProduct(p);
     }
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Added $added grocery items to cart'), backgroundColor: AppColors.success),
-      );
-    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Added ${toAdd.length} grocery item${toAdd.length == 1 ? '' : 's'} to cart'),
+        backgroundColor: AppColors.success,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final groceries = ref.watch(_groceryListProvider);
+    final products = ref.watch(_groceryProductsProvider);
+    final selected = ref.watch(_selectedIdsProvider);
     final isGenerating = ref.watch(_isGeneratingProvider);
-    final checked = ref.watch(_checkedItemsProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('AI Grocery Planner'),
         actions: [
-          if (groceries.isNotEmpty)
+          if (products.isNotEmpty && selected.isNotEmpty)
             TextButton.icon(
-              onPressed: _addCheckedToCart,
+              onPressed: _addSelectedToCart,
               icon: const Icon(Icons.shopping_cart_outlined, size: 18),
-              label: Text(checked.isEmpty ? 'Add All' : 'Add ${checked.length}'),
+              label: Text('Add ${selected.length}'),
             ),
         ],
       ),
@@ -76,9 +96,9 @@ class _GroceryPlannerScreenState extends ConsumerState<GroceryPlannerScreen> {
           Expanded(
             child: isGenerating
                 ? _buildLoadingState()
-                : groceries.isEmpty
+                : products.isEmpty
                     ? _buildEmptyState()
-                    : _buildGroceryList(groceries, checked),
+                    : _buildProductList(products, selected),
           ),
         ],
       ),
@@ -92,6 +112,7 @@ class _GroceryPlannerScreenState extends ConsumerState<GroceryPlannerScreen> {
           boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
         ),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Row(
               children: [
@@ -165,71 +186,94 @@ class _GroceryPlannerScreenState extends ConsumerState<GroceryPlannerScreen> {
         ),
       );
 
-  Widget _buildEmptyState() => Center(
+  Widget _buildEmptyState() => const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.shopping_basket_outlined, size: 80, color: AppColors.textSecondary),
-            const SizedBox(height: 16),
-            const Text('No grocery list yet', style: TextStyle(fontSize: 18, color: AppColors.textSecondary)),
-            const SizedBox(height: 8),
-            const Text('Configure and tap Generate to create\nyour personalized grocery list', textAlign: TextAlign.center, style: TextStyle(color: AppColors.textSecondary)),
+            Icon(Icons.shopping_basket_outlined, size: 80, color: AppColors.textSecondary),
+            SizedBox(height: 16),
+            Text('No grocery list yet', style: TextStyle(fontSize: 18, color: AppColors.textSecondary)),
+            SizedBox(height: 8),
+            Text(
+              'Configure and tap Generate to create\nyour personalized grocery list',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
           ],
         ),
       );
 
-  Widget _buildGroceryList(List<String> items, Set<String> checked) => Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('${items.length} items', style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
-                TextButton(
-                  onPressed: () => ref.read(_checkedItemsProvider.notifier).state =
-                      checked.length == items.length ? {} : Set.from(items),
-                  child: Text(checked.length == items.length ? 'Deselect All' : 'Select All'),
-                ),
-              ],
-            ),
+  Widget _buildProductList(List<Product> products, Set<int> selected) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('${products.length} items', style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+              TextButton(
+                onPressed: () {
+                  final allSelected = selected.length == products.length;
+                  ref.read(_selectedIdsProvider.notifier).state =
+                      allSelected ? {} : products.map((p) => p.id).toSet();
+                },
+                child: Text(selected.length == products.length ? 'Deselect All' : 'Select All'),
+              ),
+            ],
           ),
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: items.length,
-              itemBuilder: (_, i) {
-                final item = items[i];
-                final isChecked = checked.contains(item);
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: CheckboxListTile(
-                    value: isChecked,
-                    onChanged: (_) {
-                      final newSet = Set<String>.from(checked);
-                      if (isChecked) {
-                        newSet.remove(item);
-                      } else {
-                        newSet.add(item);
-                      }
-                      ref.read(_checkedItemsProvider.notifier).state = newSet;
-                    },
-                    title: Text(item, style: TextStyle(decoration: isChecked ? TextDecoration.lineThrough : null, color: isChecked ? AppColors.textSecondary : null)),
-                    secondary: Container(
-                      width: 32, height: 32,
-                      decoration: BoxDecoration(
-                        color: AppColors.accent.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(Icons.eco_outlined, color: AppColors.accent, size: 16),
+        ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: products.length,
+            itemBuilder: (_, i) {
+              final product = products[i];
+              final isSelected = selected.contains(product.id);
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: CheckboxListTile(
+                  value: isSelected,
+                  onChanged: (_) {
+                    final newSet = Set<int>.from(selected);
+                    if (isSelected) {
+                      newSet.remove(product.id);
+                    } else {
+                      newSet.add(product.id);
+                    }
+                    ref.read(_selectedIdsProvider.notifier).state = newSet;
+                  },
+                  title: Text(
+                    product.title,
+                    style: TextStyle(
+                      decoration: isSelected ? null : TextDecoration.none,
+                      fontWeight: FontWeight.w500,
                     ),
-                    activeColor: AppColors.primary,
-                    dense: true,
                   ),
-                );
-              },
-            ),
+                  subtitle: Text(
+                    Formatters.currency(product.discountedPriceInr),
+                    style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
+                  secondary: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: CachedNetworkImage(
+                      imageUrl: product.thumbnail,
+                      width: 48, height: 48, fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => Container(
+                        width: 48, height: 48,
+                        color: AppColors.border,
+                        child: const Icon(Icons.eco_outlined, color: AppColors.accent, size: 20),
+                      ),
+                    ),
+                  ),
+                  activeColor: AppColors.primary,
+                  dense: true,
+                ),
+              );
+            },
           ),
-        ],
-      );
+        ),
+      ],
+    );
+  }
 }

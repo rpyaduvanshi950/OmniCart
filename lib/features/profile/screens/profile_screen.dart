@@ -519,7 +519,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     : Column(
                         children: orders
                             .take(3)
-                            .map((o) => ListTile(
+                            .map<Widget>((o) => ListTile(
                                   dense: true,
                                   contentPadding: EdgeInsets.zero,
                                   leading: const Icon(Icons.receipt_outlined, color: AppColors.primary),
@@ -550,7 +550,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               _aiToolTile(Icons.compare_arrows, 'Product Comparison', () => context.push('/compare')),
               _aiToolTile(Icons.shopping_basket_outlined, 'Grocery Planner', () => context.push('/grocery-planner')),
               _aiToolTile(Icons.card_giftcard_outlined, 'Gift Recommendations', () => context.push('/gift-recommendations')),
-              _aiToolTile(Icons.admin_panel_settings_outlined, 'Admin Dashboard', () => context.push('/admin')),
             ],
           ),
         ),

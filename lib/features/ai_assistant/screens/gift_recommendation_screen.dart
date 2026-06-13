@@ -47,10 +47,13 @@ class _GiftRecommendationScreenState extends ConsumerState<GiftRecommendationScr
       budget: _budget.round(),
     );
 
+    if (!mounted) return;
+
     final products = <Product>[];
     for (final s in suggestions) {
       final results = await ProductApiService.instance.searchProducts(s, limit: 2);
       products.addAll(results.where((p) => p.discountedPriceInr <= _budget * 1.2));
+      if (!mounted) return;
     }
 
     ref.read(_giftProductsProvider.notifier).state = products.take(8).toList();
@@ -64,25 +67,29 @@ class _GiftRecommendationScreenState extends ConsumerState<GiftRecommendationScr
 
     return Scaffold(
       appBar: AppBar(title: const Text('AI Gift Recommendations')),
-      body: Column(
-        children: [
-          _buildConfig(),
-          Expanded(
-            child: isLoading
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const CircularProgressIndicator(color: AppColors.primary),
-                        const SizedBox(height: 16),
-                        Text('Finding perfect gifts under ${Formatters.currency(_budget)}...', style: const TextStyle(color: AppColors.textSecondary)),
-                      ],
-                    ),
-                  )
-                : products.isEmpty
-                    ? _buildEmptyState()
-                    : _buildGiftGrid(products),
-          ),
+      body: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(child: _buildConfig()),
+          if (isLoading)
+            SliverFillRemaining(child: _buildLoadingState())
+          else if (products.isEmpty)
+            SliverFillRemaining(child: _buildEmptyState())
+          else
+            SliverPadding(
+              padding: const EdgeInsets.all(16),
+              sliver: SliverGrid(
+                delegate: SliverChildBuilderDelegate(
+                  (_, i) => _GiftCard(product: products[i]),
+                  childCount: products.length,
+                ),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  childAspectRatio: 0.68,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -96,6 +103,7 @@ class _GiftRecommendationScreenState extends ConsumerState<GiftRecommendationScr
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: _interestsCtrl,
@@ -120,7 +128,7 @@ class _GiftRecommendationScreenState extends ConsumerState<GiftRecommendationScr
               activeColor: AppColors.primary,
               onChanged: (v) => setState(() => _budget = v),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             Wrap(
               spacing: 8,
               runSpacing: 6,
@@ -143,6 +151,20 @@ class _GiftRecommendationScreenState extends ConsumerState<GiftRecommendationScr
         ),
       );
 
+  Widget _buildLoadingState() => Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircularProgressIndicator(color: AppColors.primary),
+            const SizedBox(height: 16),
+            Text(
+              'Finding perfect gifts under ${Formatters.currency(_budget)}...',
+              style: const TextStyle(color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+      );
+
   Widget _buildEmptyState() => const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -155,15 +177,6 @@ class _GiftRecommendationScreenState extends ConsumerState<GiftRecommendationScr
           ],
         ),
       );
-
-  Widget _buildGiftGrid(List<Product> products) => GridView.builder(
-        padding: const EdgeInsets.all(16),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2, childAspectRatio: 0.68, crossAxisSpacing: 12, mainAxisSpacing: 12,
-        ),
-        itemCount: products.length,
-        itemBuilder: (_, i) => _GiftCard(product: products[i]),
-      );
 }
 
 class _GiftCard extends ConsumerWidget {
@@ -172,7 +185,7 @@ class _GiftCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final inWishlist = ref.watch(wishlistProvider.notifier).contains(product.id);
+    final inWishlist = ref.watch(wishlistProvider).any((p) => p.id == product.id);
 
     return Card(
       child: Column(
@@ -205,7 +218,7 @@ class _GiftCard extends ConsumerWidget {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                     decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(6)),
-                    child: const Text('🎁 Gift', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                    child: const Text('Gift', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
