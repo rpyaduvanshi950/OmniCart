@@ -1,0 +1,78 @@
+name: omnicart
+description: AI-powered conversational e-commerce app using Gemini.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State Management
+  flutter_riverpod: ^2.5.1
+
+  # Firebase
+  firebase_core: ^4.10.0
+  firebase_auth: ^6.5.2
+  cloud_firestore: ^6.5.0
+  firebase_storage: ^13.4.2
+  firebase_messaging: ^16.3.0
+
+  # Google AI (Gemini)
+  google_generative_ai: ^0.4.7
+
+  # Google Sign In
+  google_sign_in: ^6.2.1
+
+  # Navigation
+  go_router: ^16.1.0
+
+  # Network & HTTP
+  http: ^1.2.2
+  cached_network_image: ^3.4.1
+
+  # Speech & TTS
+  speech_to_text: ^7.0.0
+  flutter_tts: ^4.2.0
+
+  # Storage & Prefs
+  shared_preferences: ^2.3.2
+
+  # Image
+  image_picker: ^1.1.2
+
+  # Utils
+  intl: ^0.20.2
+  uuid: ^4.5.1
+  flutter_dotenv: ^6.0.1
+
+  # UI
+  shimmer: ^3.0.0
+  fl_chart: ^0.71.0
+  badges: ^3.1.2
+  flutter_rating_bar: ^4.0.1
+  animated_text_kit: ^4.2.2
+  pinput: ^6.0.2
+
+  # Notifications
+  flutter_local_notifications: ^19.5.0
+
+  # Misc
+  equatable: ^2.0.5
+  cupertino_icons: ^1.0.8
+  permission_handler: ^12.0.3
+  timeago: ^3.7.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/animations/
+    - .env
